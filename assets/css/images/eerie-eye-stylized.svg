@@ -1,0 +1,6 @@
+<svg viewBox="0 0 100 50" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer eye shape (almond) -->
+  <path d="M 0,25 C 20,0 80,0 100,25 C 80,50 20,50 0,25 Z" fill="white"/>
+  <!-- Pupil (small circle) -->
+  <circle cx="50" cy="25" r="8" fill="black"/>
+</svg>
