@@ -1,6 +1,6 @@
 // Misc.
 	$misc: (
-		bg:					#000000 url("images/bg.png") bottom left, // Path relative to compiled CSS in assets/css/
+		bg:					#000000 url("images/bg.png") bottom left, // PATH: assets/css/images/
 		bg-width:			1500px
 	);
 
@@ -16,7 +16,7 @@
 // Size.
 	$size: (
 		nav-icon-wrapper:	5.35em,
-		nav-icon:			1.75em
+		nav-icon:			1.75em // This is for the Font Awesome icon size within the circle
 	);
 
 // Font.
@@ -25,10 +25,10 @@
 
 // Palette.
 	$palette: (
-		bg:					#000000,
-		fg:					#fff,
+		bg:					#000000, // Body background
+		fg:					#fff,    // General text color
 
-		nav-icon: (
+		nav-icon: ( // Styles for the Font Awesome icon circles
 			hover-bg:		rgba(255,255,255,0.175),
 			hover-fg:		#fff,
 			active-bg:		rgba(255,255,255,0.35),
