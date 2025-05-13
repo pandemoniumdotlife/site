@@ -9,35 +9,41 @@
 		<title>PANDEMONIUM</title>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;900&display=swap" rel="stylesheet">
 		<link rel="stylesheet" href="assets/css/main.css" />
+		<link rel="icon" type="image/png" href="assets/css/images/webicon.png"> 
 		<noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
 	</head>
 	<body class="is-preload">
 		<div id="wrapper">
 			<div id="bg"></div>
-			<div id="overlay"></div>
+			<div id="overlay">
+				<div id="eerie-eyes-container">
+					<!-- Eyes will be dynamically added here by JavaScript -->
+				</div>
+			</div>
 			<div id="main">
 
 				<!-- Header -->
 					<header id="header">
 						<h1>PANDEMONIUM</h1>
-						<!-- <p>Security Chief &nbsp;&bull;&nbsp; Cyborg &nbsp;&bull;&nbsp; Never asked for this</p> -->
+						<!-- <p>Security Chief  •  Cyborg  •  Never asked for this</p> -->
 						<nav>
 							<ul>
-								<li><a href="#" class="icon brands fa-instagram"><span class="label">Instagram</span></a></li>
-								<li><a href="#" class="icon brands fa-tiktok"><span class="label">TikTok</span></a></li>
+								<li><a href="https://www.instagram.com/YOUR_INSTAGRAM_USERNAME_HERE" target="_blank" class="icon brands fa-instagram"><span class="label">Instagram</span></a></li> {/* UPDATED LINK */}
+								<li><a href="https://www.tiktok.com/@YOUR_TIKTOK_USERNAME_HERE" target="_blank" class="icon brands fa-tiktok"><span class="label">TikTok</span></a></li> {/* UPDATED LINK */}
 								<!--
 								<li><a href="#" class="icon brands fa-dribbble"><span class="label">Dribbble</span></a></li>
 								<li><a href="#" class="icon brands fa-github"><span class="label">Github</span></a></li>
 								 -->
-								<li><a href="#" class="icon solid fa-envelope"><span class="label">Email</span></a></li>
+								<li><a href="mailto:your.email@gmail.com" class="icon solid fa-envelope"><span class="label">Email</span></a></li> {/* UPDATED LINK */}
 							</ul>
 						</nav>
 					</header>
 
 				<!-- Footer -->
 					<footer id="footer">
-						<span class="copyright">&copy; Untitled. Design: <a href="http://html5up.net">HTML5 UP</a>.</span>
+						
 					</footer>
 
 			</div>
@@ -47,5 +53,6 @@
 			window.ontouchmove = function() { return false; }
 			window.onorientationchange = function() { document.body.scrollTop = 0; }
 		</script>
+		<script src="assets/js/eerie.js"></script> 
 	</body>
 </html>
