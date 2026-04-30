@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSC Project Management Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0a0a0a;
+            --panel-bg: rgba(255, 255, 255, 0.03);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text-main: #ededed;
+            --text-muted: #888888;
+            --accent: #5e6ad2;
+            --accent-hover: #7b88eb;
+            --success: #4caf50;
+            --warning: #ffb74d;
+            --danger: #ef5350;
+            --today-bg: rgba(94, 106, 210, 0.15);
+            --selected-bg: rgba(255, 255, 255, 0.08);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+        body { background-color: var(--bg-color); color: var(--text-main); padding: 2rem; line-height: 1.6; }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        .container { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+
+        /* Tooltip System */
+        [data-tooltip] { position: relative; cursor: help; }
+        [data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid var(--panel-border);
+            color: #fff;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            z-index: 1000;
+            margin-bottom: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            pointer-events: none;
+            animation: fadeInTooltip 0.2s ease forwards;
+            opacity: 0;
+        }
+        @keyframes fadeInTooltip { to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+        /* Floating Panel */
+        .panel { background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: box-shadow 0.3s ease; }
+        .panel:hover { box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.6); }
+
+        h1, h2, h3 { font-weight: 600; }
+        
+        .header-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .project-title { background: transparent; border: none; color: var(--text-main); font-size: 2rem; font-weight: 700; width: 100%; max-width: 600px; border-bottom: 2px solid transparent; transition: border-color 0.3s; }
+        .project-title:focus { outline: none; border-bottom: 2px solid var(--accent); }
+        .countdown { background: rgba(94, 106, 210, 0.1); color: #8ab4f8; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; border: 1px solid rgba(94, 106, 210, 0.3); }
+
+        .progress-container { width: 100%; background: #222; border-radius: 8px; height: 12px; overflow: hidden; margin-top: 0.5rem; }
+        .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+
+        /* Central Hub (Timetable + Record) */
+        .central-hub { display: grid; grid-template-columns: 2.5fr 1fr; gap: 2rem; }
+        .hub-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; grid-column: 1 / -1; border-bottom: 1px solid var(--panel-border); padding-bottom: 1rem; }
+        
+        .timetable-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; }
+        .day-col { background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; cursor: pointer; transition: transform 0.2s, border-color 0.2s; }
+        .day-col:hover { border-color: var(--text-muted); transform: translateY(-2px); }
+        .day-col.is-selected { border-color: var(--accent); background: var(--selected-bg); box-shadow: 0 0 0 2px rgba(94,106,210,0.3); }
+        .day-col.is-today .day-header { background: var(--today-bg); color: #fff; border-bottom-color: var(--accent); }
+        
+        .day-header { padding: 0.5rem; text-align: center; font-size: 0.85rem; background: rgba(0,0,0,0.5); border-bottom: 1px solid var(--panel-border); color: var(--text-muted); pointer-events: none; }
+        .day-header strong { display: block; font-size: 1rem; color: var(--text-main); margin-bottom: 0.2rem; }
+        .day-tasks { padding: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; gap: 0.5rem; min-height: 140px; pointer-events: none; }
+        
+        .task-item { background: rgba(255,255,255,0.05); padding: 0.5rem; border-radius: 4px; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: flex-start; word-break: break-word; border-left: 2px solid var(--accent); pointer-events: auto; }
+        .delete-task { cursor: pointer; color: var(--danger); background: none; border: none; font-size: 0.9rem; padding: 0 0 0 5px; line-height: 1; opacity: 0.5; transition: opacity 0.2s; }
+        .task-item:hover .delete-task { opacity: 1; }
+
+        /* Daily Record Panel (Right side of Hub) */
+        .daily-record { background: rgba(0,0,0,0.2); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; border: 1px solid var(--panel-border); }
+        .daily-record h3 { font-size: 1.1rem; color: var(--accent); }
+        .add-task-input { width: 100%; background: #111; border: 1px solid var(--panel-border); color: var(--text-main); padding: 0.75rem; font-size: 0.85rem; border-radius: 8px; outline: none; transition: border-color 0.2s; }
+        .add-task-input:focus { border-color: var(--accent); }
+        
+        textarea { background: #111; color: var(--text-main); border: 1px solid var(--panel-border); padding: 0.75rem; border-radius: 8px; outline: none; width: 100%; resize: vertical; min-height: 160px; font-size: 0.9rem; transition: border-color 0.2s; }
+        textarea:focus { border-color: var(--accent); }
+
+        /* Bottom Grid */
+        .bottom-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; }
+
+        /* Checklists & Kanban */
+        details { margin-bottom: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.5rem; transition: background 0.3s; }
+        summary { cursor: pointer; font-weight: 600; padding: 0.5rem; list-style: none; display: flex; justify-content: space-between; user-select: none; }
+        summary::-webkit-details-marker { display: none; }
+        .checkbox-group { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; color: var(--text-muted); transition: color 0.2s, transform 0.2s ease; }
+        .checkbox-group:hover { color: var(--text-main); transform: translateX(4px); }
+        input[type="checkbox"] { appearance: none; width: 20px; height: 20px; border: 2px solid var(--text-muted); border-radius: 6px; cursor: pointer; position: relative; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        input[type="checkbox"]:checked { background-color: var(--accent); border-color: var(--accent); }
+        input[type="checkbox"]:checked::after { content: '✔'; position: absolute; color: white; font-size: 13px; left: 3px; top: -1px; }
+
+        .kanban-board { display: flex; flex-direction: column; gap: 1rem; }
+        .kanban-col { background: rgba(0,0,0,0.4); border-radius: 12px; padding: 1rem; min-height: 120px; border-left: 4px solid transparent; display: flex; flex-direction: column; gap: 0.75rem; }
+        .kanban-col.not-started { border-left-color: var(--danger); }
+        .kanban-col.in-progress { border-left-color: var(--warning); }
+        .kanban-col.complete { border-left-color: var(--success); }
+        .kanban-col h3 { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .kanban-card { background: #1a1a1a; border: 1px solid var(--panel-border); border-radius: 8px; padding: 0.75rem; font-size: 0.85rem; cursor: grab; transition: transform 0.2s, box-shadow 0.2s; }
+        .kanban-card:active { cursor: grabbing; transform: scale(1.02); }
+        .kanban-card:hover { border-color: var(--text-muted); }
+        .kanban-col.drag-over { background: rgba(255,255,255,0.08); border-style: dashed; }
+
+        /* Report Tracker */
+        .word-count-wrapper { display: flex; align-items: center; gap: 1rem; margin: 1rem 0; }
+        .word-count-wrapper input { width: 100px; background: #111; color: #fff; border: 1px solid var(--panel-border); padding: 0.5rem; border-radius: 6px; outline: none; }
+        .word-count-wrapper input:focus { border-color: var(--accent); }
+
+        /* Buttons & Forms */
+        .btn-outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+        .btn-outline:hover { background: rgba(94, 106, 210, 0.1); }
+
+        /* Full Screen Calendar Modal */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); backdrop-filter: blur(8px); opacity: 0; transition: opacity 0.3s; }
+        .modal.show { display: block; opacity: 1; }
+        .modal-content { margin: 3% auto; width: 95%; max-width: 1600px; height: 90vh; overflow-y: auto; position: relative; padding-top: 4rem; }
+        .close-btn { position: absolute; right: 2rem; top: 1.5rem; font-size: 2.5rem; font-weight: bold; cursor: pointer; color: var(--text-muted); transition: color 0.2s; line-height: 1; z-index: 10; }
+        .close-btn:hover { color: var(--danger); }
+        .week-wrapper { margin-bottom: 2.5rem; }
+        .week-title { font-size: 1.2rem; color: var(--accent); margin-bottom: 0.75rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 0.5rem; font-weight: 600; }
+
+        @media (max-width: 1200px) {
+            .central-hub { grid-template-columns: 1fr; }
+            .bottom-grid { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 768px) {
+            .timetable-grid { grid-template-columns: repeat(2, 1fr); }
+            .bottom-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        
+        <div class="panel">
+            <div class="header-top">
+                <input type="text" id="projectTitle" class="project-title" placeholder="Click to set Project Title...">
+                <div class="countdown" id="countdownTimer" data-tooltip="Total time remaining for your 30% assessment">Loading deadline...</div>
+            </div>
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+                    <span style="font-size: 0.9rem; color: var(--text-muted);">Overall Phase Completion</span>
+                    <span id="progressText" style="font-size: 0.9rem; font-weight: 600;">0%</span>
+                </div>
+                <div class="progress-container" data-tooltip="Calculated based on the Project Phases checklist below">
+                    <div class="progress-bar" id="overallProgress"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel central-hub">
+            <div class="hub-header">
+                <div>
+                    <h2 id="mainWeekTitle">Project Command Center</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">Select a day to view/edit your management record and tasks.</p>
+                </div>
+                <button class="btn-outline" onclick="openCalendarModal()" data-tooltip="View the full timeline up to June 2026">⛶ Full Timeline</button>
+            </div>
+            
+            <div>
+                <div class="timetable-grid" id="mainWeekGrid">
+                    </div>
+            </div>
+
+            <div class="daily-record">
+                <div>
+                    <h3 id="recordDateTitle">Select a day</h3>
+                    <p style="font-size: 0.8rem; color: var(--text-muted);">Weekly Management Record linked to this date.</p>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <label style="font-size: 0.85rem; font-weight: 600;">Add Specific Task:</label>
+                    <input type="text" id="recordTaskInput" class="add-task-input" placeholder="Type a task and press Enter..." disabled>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; flex-grow: 1;">
+                    <label style="font-size: 0.85rem; font-weight: 600;" data-tooltip="Crucial for HSC marking: detail what you built, what broke, and how you fixed it.">Challenges Faced & Notes:</label>
+                    <textarea id="recordNotesInput" placeholder="Select a day to start typing notes..." disabled></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-grid">
+            
+            <div class="panel">
+                <h2 style="margin-bottom: 1rem;">Project Phases</h2>
+                <details open>
+                    <summary data-tooltip="Initial planning and scoping of the assessment">Phase 1: Identifying & Defining</summary>
+                    <div class="checkbox-group"><input type="checkbox" id="p1_1" class="phase-cb"> <label for="p1_1">Project Brief</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p1_2" class="phase-cb"> <label for="p1_2">Feasibility Study</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p1_3" class="phase-cb"> <label for="p1_3">Hardware/Software Tools</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p1_4" class="phase-cb"> <label for="p1_4">Skills Analysis</label></div>
+                </details>
+                <details>
+                    <summary data-tooltip="Research, Gantt charts, mockups, and ethics">Phase 2: Researching & Planning</summary>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_1" class="phase-cb"> <label for="p2_1">Problem Research</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_2" class="phase-cb"> <label for="p2_2">Existing Commercial Solutions</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_3" class="phase-cb"> <label for="p2_3">Idea Mindmaps</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_4" class="phase-cb"> <label for="p2_4">Planning Gantt Chart</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_5" class="phase-cb"> <label for="p2_5">Finance Plan</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_6" class="phase-cb"> <label for="p2_6">Dev Approach Selection</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_7" class="phase-cb"> <label for="p2_7">Social/Ethical Implications</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_8" class="phase-cb"> <label for="p2_8">Maintenance Plan</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_9" class="phase-cb"> <label for="p2_9">UI/UX Mockups</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p2_10" class="phase-cb"> <label for="p2_10">Testing Approach</label></div>
+                </details>
+                <details>
+                    <summary data-tooltip="The actual coding and building of the project">Phase 3: Producing & Implementing</summary>
+                    <div class="checkbox-group"><input type="checkbox" id="p3_1" class="phase-cb"> <label for="p3_1">Front End Development</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p3_2" class="phase-cb"> <label for="p3_2">Back End Development</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p3_3" class="phase-cb"> <label for="p3_3">Interface Testing</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p3_4" class="phase-cb"> <label for="p3_4">System Refinement</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p3_5" class="phase-cb"> <label for="p3_5">Weekly Journal Updates</label></div>
+                </details>
+                <details>
+                    <summary data-tooltip="Refining and documenting based on feedback">Phase 4: Testing & Evaluating</summary>
+                    <div class="checkbox-group"><input type="checkbox" id="p4_1" class="phase-cb"> <label for="p4_1">Testing Method Documentation</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p4_2" class="phase-cb"> <label for="p4_2">Refining Feedback</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p4_3" class="phase-cb"> <label for="p4_3">Apply Maintenance</label></div>
+                    <div class="checkbox-group"><input type="checkbox" id="p4_4" class="phase-cb"> <label for="p4_4">Final Project Evaluation</label></div>
+                </details>
+            </div>
+
+            <div class="panel">
+                <h2 style="margin-bottom: 1rem;">Appendices Tracker</h2>
+                <div class="kanban-board">
+                    <div class="kanban-col not-started" id="col-not-started" ondrop="drop(event)" ondragover="allowDrop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)">
+                        <h3>Not Started</h3>
+                        <div class="kanban-card" id="appA" draggable="true" ondragstart="drag(event)" data-tooltip="Your mandatory HSC criteria checklist">Appx A: Project Checklist</div>
+                        <div class="kanban-card" id="appB" draggable="true" ondragstart="drag(event)">Appx B: SWOT & Ideas</div>
+                        <div class="kanban-card" id="appC" draggable="true" ondragstart="drag(event)">Appx C: Pitch Deck</div>
+                        <div class="kanban-card" id="appD" draggable="true" ondragstart="drag(event)">Appx D: Design Scaffold</div>
+                    </div>
+                    <div class="kanban-col in-progress" id="col-in-progress" ondrop="drop(event)" ondragover="allowDrop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)">
+                        <h3>In Progress</h3>
+                    </div>
+                    <div class="kanban-col complete" id="col-complete" ondrop="drop(event)" ondragover="allowDrop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)">
+                        <h3>Complete</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Part B Report</h2>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">2400-3200 words</p>
+                <div class="word-count-wrapper">
+                    <input type="number" id="wordCount" class="auto-save" placeholder="0" min="0" max="4000">
+                    <span style="color: var(--text-muted);">/ 3200 words</span>
+                </div>
+                <div class="progress-container" style="margin-bottom: 1rem; height: 6px;">
+                    <div class="progress-bar" id="wordProgress" style="background: var(--success);"></div>
+                </div>
+                <div class="checkbox-group"><input type="checkbox" id="rep_design" class="phase-cb"> <label for="rep_design">Design & Dev Drafted</label></div>
+                <div class="checkbox-group"><input type="checkbox" id="rep_effect" class="phase-cb"> <label for="rep_effect">Effectiveness Drafted</label></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="calendarModal" class="modal">
+        <div class="modal-content panel">
+            <span class="close-btn" onclick="closeCalendarModal()">&times;</span>
+            <h2 style="font-size: 2rem; margin-bottom: 0.5rem;">Project Master Timeline</h2>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">Showing all weeks from today until the HSC Deadline (June 25, 2026).</p>
+            <div id="fullCalendarContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Core Data Management V7 ---
+        const storageKey = 'hsc_project_dashboard_v7'; 
+        const projectDeadline = new Date("2026-06-25T00:00:00");
+        
+        let appData = JSON.parse(localStorage.getItem(storageKey)) || {
+            title: '',
+            inputs: {}, 
+            kanban: { 'appA': 'col-not-started', 'appB': 'col-not-started', 'appC': 'col-not-started', 'appD': 'col-not-started' },
+            calendar: {}, // tasks: appData.calendar['YYYY-MM-DD'] = ["task1"]
+            notes: {}     // journal: appData.notes['YYYY-MM-DD'] = "My notes..."
+        };
+
+        let selectedDateYMD = getLocalYMD(new Date()); // Default to today
+
+        function saveToStorage() {
+            localStorage.setItem(storageKey, JSON.stringify(appData));
+            updateOverallProgress();
+        }
+
+        // --- Date Utilities ---
+        function getLocalYMD(dateObj) {
+            const tzoffset = (new Date()).getTimezoneOffset() * 60000; 
+            return (new Date(dateObj - tzoffset)).toISOString().split('T')[0];
+        }
+
+        function getMonday(d) {
+            d = new Date(d);
+            d.setHours(0, 0, 0, 0); 
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
+            return new Date(d.setDate(diff));
+        }
+
+        function getFormattedDayTitle(dateObj) {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `<strong>${days[dateObj.getDay()]}</strong> ${dateObj.getDate()} ${months[dateObj.getMonth()]}`;
+        }
+        
+        function getFullReadableDate(ymd) {
+            const d = new Date(ymd);
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+        }
+
+        // --- Central Hub Logic ---
+        function selectDate(ymd) {
+            selectedDateYMD = ymd;
+            renderMainWeek(); 
+            updateDailyRecordPanel();
+        }
+
+        function updateDailyRecordPanel() {
+            const titleEl = document.getElementById('recordDateTitle');
+            const taskInput = document.getElementById('recordTaskInput');
+            const notesInput = document.getElementById('recordNotesInput');
+            
+            titleEl.innerText = getFullReadableDate(selectedDateYMD);
+            
+            // Enable inputs
+            taskInput.disabled = false;
+            notesInput.disabled = false;
+            
+            // Load Notes
+            notesInput.value = appData.notes[selectedDateYMD] || '';
+            
+            // Bind tasks input
+            taskInput.onkeypress = (e) => {
+                if (e.key === 'Enter' && e.target.value.trim() !== '') {
+                    if (!appData.calendar[selectedDateYMD]) appData.calendar[selectedDateYMD] = [];
+                    appData.calendar[selectedDateYMD].push(e.target.value.trim());
+                    saveToStorage();
+                    e.target.value = '';
+                    renderMainWeek();
+                    if (document.getElementById('calendarModal').classList.contains('show')) renderFullCalendar();
+                }
+            };
+
+            // Bind notes input (auto-save)
+            notesInput.oninput = (e) => {
+                appData.notes[selectedDateYMD] = e.target.value;
+                saveToStorage();
+            };
+        }
+
+        function createWeekGridHTML(mondayDateObj) {
+            let html = ''; 
+            const todayYMD = getLocalYMD(new Date());
+
+            for (let i = 0; i < 7; i++) {
+                const currentDay = new Date(mondayDateObj);
+                currentDay.setDate(mondayDateObj.getDate() + i);
+                
+                const ymd = getLocalYMD(currentDay);
+                const isToday = ymd === todayYMD;
+                const isSelected = ymd === selectedDateYMD;
+                
+                const tasks = appData.calendar[ymd] || [];
+                const hasNotes = appData.notes[ymd] && appData.notes[ymd].trim() !== '';
+                
+                let tasksHtml = '';
+                tasks.forEach((task, taskIdx) => {
+                    tasksHtml += `
+                        <div class="task-item">
+                            <span>${task}</span>
+                            <button class="delete-task" onclick="event.stopPropagation(); deleteCalendarTask('${ymd}', ${taskIdx})">×</button>
+                        </div>
+                    `;
+                });
+                
+                let notesIndicator = hasNotes ? `<div style="font-size: 0.7rem; color: var(--accent); margin-top: 5px; text-align: center;">📝 Notes saved</div>` : '';
+
+                html += `
+                    <div class="day-col ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}" onclick="selectDate('${ymd}')">
+                        <div class="day-header">${getFormattedDayTitle(currentDay)}</div>
+                        <div class="day-tasks">
+                            ${tasksHtml}
+                            ${notesIndicator}
+                        </div>
+                    </div>
+                `;
+            }
+            return html;
+        }
+
+        function renderMainWeek() {
+            const grid = document.getElementById('mainWeekGrid');
+            const thisMonday = getMonday(new Date());
+            grid.innerHTML = createWeekGridHTML(thisMonday);
+        }
+
+        function renderFullCalendar() {
+            const container = document.getElementById('fullCalendarContainer');
+            container.innerHTML = '';
+            
+            let currentMonday = getMonday(new Date());
+            const deadlineMonday = getMonday(projectDeadline);
+            let weekCount = 2;
+            
+            while (currentMonday <= deadlineMonday) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'week-wrapper';
+                const startDateStr = `${currentMonday.getDate()} ${currentMonday.toLocaleString('default', { month: 'short' })}`;
+                
+                wrapper.innerHTML = `
+                    <div class="week-title">Week ${weekCount} <span style="font-size: 0.85rem; color: var(--text-muted); margin-left: 8px;">(Starts ${startDateStr})</span></div>
+                    <div class="timetable-grid">
+                        ${createWeekGridHTML(currentMonday)}
+                    </div>
+                `;
+                container.appendChild(wrapper);
+                currentMonday.setDate(currentMonday.getDate() + 7);
+                weekCount++;
+            }
+        }
+
+        function deleteCalendarTask(ymd, taskIdx) {
+            if (appData.calendar[ymd]) {
+                appData.calendar[ymd].splice(taskIdx, 1);
+                saveToStorage();
+                renderMainWeek();
+                if (document.getElementById('calendarModal').classList.contains('show')) renderFullCalendar();
+            }
+        }
+
+        // --- Modal Controls ---
+        function openCalendarModal() {
+            renderFullCalendar(); 
+            const modal = document.getElementById('calendarModal');
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden'; 
+        }
+        function closeCalendarModal() {
+            const modal = document.getElementById('calendarModal');
+            modal.classList.remove('show');
+            document.body.style.overflow = 'auto';
+            renderMainWeek(); // re-render main to catch any changes made in modal
+        }
+
+        // --- Kanban Drag/Drop ---
+        function drag(ev) { ev.dataTransfer.setData("text", ev.target.id); ev.target.style.opacity = '0.5'; }
+        function allowDrop(ev) { ev.preventDefault(); }
+        function dragEnter(ev) { ev.preventDefault(); const col = ev.target.closest('.kanban-col'); if(col) col.classList.add('drag-over'); }
+        function dragLeave(ev) { const col = ev.target.closest('.kanban-col'); if(col) col.classList.remove('drag-over'); }
+        function drop(ev) {
+            ev.preventDefault();
+            const data = ev.dataTransfer.getData("text");
+            const card = document.getElementById(data);
+            const dropZone = ev.target.closest('.kanban-col');
+            if (card) card.style.opacity = '1';
+            if (dropZone && card) {
+                dropZone.classList.remove('drag-over');
+                dropZone.appendChild(card);
+                appData.kanban[data] = dropZone.id;
+                saveToStorage();
+            }
+        }
+        document.addEventListener('dragend', (ev) => {
+            if (ev.target.classList.contains('kanban-card')) {
+                ev.target.style.opacity = '1';
+                document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over'));
+            }
+        });
+        function restoreKanban() {
+            for (const [cardId, colId] of Object.entries(appData.kanban)) {
+                const card = document.getElementById(cardId);
+                const col = document.getElementById(colId);
+                if (card && col) col.appendChild(card);
+            }
+        }
+
+        // --- Core Bindings & Progress ---
+        function initAutoSave() {
+            const titleInput = document.getElementById('projectTitle');
+            titleInput.value = appData.title || '';
+            titleInput.addEventListener('input', (e) => { appData.title = e.target.value; saveToStorage(); });
+
+            document.querySelectorAll('.phase-cb, .auto-save').forEach(input => {
+                if (appData.inputs[input.id] !== undefined) {
+                    if (input.type === 'checkbox') input.checked = appData.inputs[input.id];
+                    else input.value = appData.inputs[input.id];
+                }
+                input.addEventListener('change', (e) => {
+                    if (e.target.type === 'checkbox') appData.inputs[e.target.id] = e.target.checked;
+                    else appData.inputs[e.target.id] = e.target.value;
+                    saveToStorage();
+                    if(e.target.id === 'wordCount') updateWordProgress();
+                });
+            });
+        }
+
+        function updateOverallProgress() {
+            const checkboxes = document.querySelectorAll('.phase-cb');
+            const total = checkboxes.length;
+            const checked = Array.from(checkboxes).filter(cb => cb.checked).length;
+            const percent = total === 0 ? 0 : Math.round((checked / total) * 100);
+            document.getElementById('progressText').innerText = `${percent}%`;
+            document.getElementById('overallProgress').style.width = `${percent}%`;
+        }
+
+        function updateWordProgress() {
+            const words = parseInt(document.getElementById('wordCount').value) || 0;
+            const percent = Math.min((words / 3200) * 100, 100);
+            document.getElementById('wordProgress').style.width = `${percent}%`;
+        }
+
+        function updateCountdown() {
+            const distance = projectDeadline.getTime() - new Date().getTime();
+            if (distance < 0) return document.getElementById("countdownTimer").innerText = "Deadline Passed!";
+            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            document.getElementById("countdownTimer").innerText = `⏳ ${days}d ${hours}h until deadline`;
+        }
+
+        // Initialize
+        window.onload = () => {
+            initAutoSave();
+            restoreKanban();
+            updateOverallProgress();
+            updateWordProgress();
+            updateCountdown();
+            setInterval(updateCountdown, 1000 * 60 * 60);
+            
+            // Load Central Hub
+            renderMainWeek();
+            updateDailyRecordPanel();
+        };
+    </script>
+</body>
+</html>
