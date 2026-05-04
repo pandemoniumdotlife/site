@@ -58,6 +58,9 @@
         /* Central Hub (Timetable + Record) */
         .central-hub { display: grid; grid-template-columns: 2.5fr 1fr; gap: 2rem; }
         .hub-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; grid-column: 1 / -1; border-bottom: 1px solid var(--panel-border); padding-bottom: 1rem; }
+        .hub-nav { display: flex; gap: 0.5rem; align-items: center; }
+        .btn-nav { background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color: var(--text-main); padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 0.85rem; }
+        .btn-nav:hover { background: rgba(255,255,255,0.1); border-color: var(--text-muted); }
         
         .timetable-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; }
         .day-col { background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; cursor: pointer; transition: transform 0.2s, border-color 0.2s; }
@@ -67,7 +70,7 @@
         
         .day-header { padding: 0.5rem; text-align: center; font-size: 0.85rem; background: rgba(0,0,0,0.5); border-bottom: 1px solid var(--panel-border); color: var(--text-muted); pointer-events: none; }
         .day-header strong { display: block; font-size: 1rem; color: var(--text-main); margin-bottom: 0.2rem; }
-        .day-tasks { padding: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; gap: 0.5rem; min-height: 140px; pointer-events: none; }
+        .day-tasks { padding: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; gap: 0.5rem; min-height: 100px; pointer-events: none; }
         
         .task-item { background: rgba(255,255,255,0.05); padding: 0.5rem; border-radius: 4px; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: flex-start; word-break: break-word; border-left: 2px solid var(--accent); pointer-events: auto; cursor: pointer; transition: background 0.2s; }
         .task-item:hover { background: rgba(255,255,255,0.1); }
@@ -167,13 +170,17 @@
             </div>
         </div>
 
-        <div class="panel central-hub">
+        <div class="panel central-hub" id="commandCenter">
             <div class="hub-header">
                 <div>
-                    <h2 id="mainWeekTitle">Project Command Center</h2>
+                    <h2 id="mainWeekTitle">Project Command Center (14-Day View)</h2>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">Click a day to add tasks. Click a task to view details/images.</p>
                 </div>
-                <button class="btn-outline" onclick="openCalendarModal()" data-tooltip="View the full timeline up to June 2026">⛶ Full Timeline</button>
+                <div class="hub-nav">
+                    <button class="btn-nav" onclick="shiftWeeks(-1)" data-tooltip="Go back 1 week">❮ Prev</button>
+                    <button class="btn-nav" onclick="shiftWeeks(1)" data-tooltip="Go forward 1 week">Next ❯</button>
+                    <button class="btn-outline" style="margin-left: 0.5rem;" onclick="openCalendarModal()" data-tooltip="View the full timeline up to June 2026">⛶ Full Timeline</button>
+                </div>
             </div>
             
             <div>
@@ -288,7 +295,7 @@
         <div class="modal-content panel">
             <span class="close-btn" onclick="closeCalendarModal()">&times;</span>
             <h2 style="font-size: 2rem; margin-bottom: 0.5rem;">Project Master Timeline</h2>
-            <p style="color: var(--text-muted); margin-bottom: 2rem;">Showing all weeks from today until the HSC Deadline (June 25, 2026).</p>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">Showing all weeks from project start until the HSC Deadline. Click any day to jump to it.</p>
             <div id="fullCalendarContainer"></div>
         </div>
     </div>
@@ -307,25 +314,21 @@
     </div>
 
     <script>
-        // --- Core Data Management V8 ---
-        const storageKey = 'hsc_project_dashboard_v8'; 
+        // --- Core Data Management V9 ---
+        const storageKey = 'hsc_project_dashboard_v9'; 
         const projectDeadline = new Date("2026-06-25T00:00:00");
+        const projectStartDate = new Date("2025-10-01T00:00:00"); // Base start for full timeline
         
         let appData = JSON.parse(localStorage.getItem(storageKey)) || {
             title: '', inputs: {}, 
             kanban: { 'appA': 'col-not-started', 'appB': 'col-not-started', 'appC': 'col-not-started', 'appD': 'col-not-started' },
-            calendar: {} // Format: { "YYYY-MM-DD": [ { title: "x", notes: "y", image: "base64" } ] }
+            calendar: {} 
         };
 
-        // Migration from V7 (String arrays to Object arrays)
-        for (let date in appData.calendar) {
-            appData.calendar[date] = appData.calendar[date].map(task => {
-                return typeof task === 'string' ? { title: task, notes: '', image: null } : task;
-            });
-        }
-
+        // UI State
+        let displayStartMonday = getMonday(new Date()); 
         let selectedDateYMD = getLocalYMD(new Date()); 
-        let pendingImageData = null; // Holds base64 before save
+        let pendingImageData = null; 
 
         function saveToStorage() {
             try {
@@ -358,30 +361,26 @@
             return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
         }
 
-        // --- Image Compression (Canvas) ---
+        // --- Navigation ---
+        function shiftWeeks(direction) {
+            displayStartMonday.setDate(displayStartMonday.getDate() + (direction * 7));
+            renderMainWeek();
+        }
+
+        // --- Image Compression ---
         document.getElementById('newTaskImage').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) { pendingImageData = null; return; }
-            
             const reader = new FileReader();
             reader.onload = function(event) {
                 const img = new Image();
                 img.onload = function() {
                     const canvas = document.createElement('canvas');
-                    const MAX_WIDTH = 800; // Constrain width to save local storage space
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    // Compress to 70% quality JPEG
+                    const MAX_WIDTH = 800; 
+                    let width = img.width; let height = img.height;
+                    if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                    canvas.width = width; canvas.height = height;
+                    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
                     pendingImageData = canvas.toDataURL('image/jpeg', 0.7); 
                 }
                 img.src = event.target.result;
@@ -389,25 +388,32 @@
             reader.readAsDataURL(file);
         });
 
-        // --- Central Hub & Task Logic ---
+        // --- Central Hub Logic ---
         function selectDate(ymd) {
             selectedDateYMD = ymd;
             renderMainWeek(); 
             updateTaskFormPanel();
         }
 
+        // Used when clicking a day in the FULL TIMELINE
+        function selectDateFromModal(ymd) {
+            selectedDateYMD = ymd;
+            displayStartMonday = getMonday(new Date(ymd)); // Shift main view to this week
+            closeCalendarModal();
+            renderMainWeek();
+            updateTaskFormPanel();
+            document.getElementById('commandCenter').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
         function updateTaskFormPanel() {
             document.getElementById('recordDateTitle').innerText = getFullReadableDate(selectedDateYMD);
-            
             const titleInput = document.getElementById('newTaskTitle');
             const notesInput = document.getElementById('newTaskNotes');
             const imageInput = document.getElementById('newTaskImage');
             const saveBtn = document.getElementById('saveTaskBtn');
             
-            // Enable and clear inputs for the new day
             titleInput.disabled = false; notesInput.disabled = false; imageInput.disabled = false; saveBtn.disabled = false;
             titleInput.value = ''; notesInput.value = ''; imageInput.value = ''; pendingImageData = null;
-            
             titleInput.onkeypress = (e) => { if (e.key === 'Enter') submitNewTask(); };
         }
 
@@ -421,22 +427,11 @@
 
             if (!appData.calendar[selectedDateYMD]) appData.calendar[selectedDateYMD] = [];
             
-            appData.calendar[selectedDateYMD].push({
-                title: title,
-                notes: notesInput.value.trim(),
-                image: pendingImageData
-            });
-            
+            appData.calendar[selectedDateYMD].push({ title: title, notes: notesInput.value.trim(), image: pendingImageData });
             saveToStorage();
             
-            // WIPE the inputs cleanly
-            titleInput.value = '';
-            notesInput.value = '';
-            imageInput.value = '';
-            pendingImageData = null;
-            
+            titleInput.value = ''; notesInput.value = ''; imageInput.value = ''; pendingImageData = null;
             renderMainWeek();
-            if (document.getElementById('calendarModal').classList.contains('show')) renderFullCalendar();
         }
 
         function deleteCalendarTask(ymd, taskIdx) {
@@ -449,7 +444,7 @@
             }
         }
 
-        // --- Viewing Tasks (NEW) ---
+        // --- Viewing Tasks ---
         function openTaskDetails(ymd, taskIdx) {
             const task = appData.calendar[ymd][taskIdx];
             if(!task) return;
@@ -460,46 +455,30 @@
             const notesEl = document.getElementById('taskDetailNotes');
             const imageEl = document.getElementById('taskDetailImage');
             const emptyEl = document.getElementById('taskDetailEmpty');
-
             let hasContent = false;
 
-            if (task.notes) {
-                notesEl.innerText = task.notes;
-                notesEl.style.display = 'block';
-                hasContent = true;
-            } else {
-                notesEl.style.display = 'none';
-            }
+            if (task.notes) { notesEl.innerText = task.notes; notesEl.style.display = 'block'; hasContent = true; } 
+            else { notesEl.style.display = 'none'; }
 
-            if (task.image) {
-                imageEl.src = task.image;
-                imageEl.style.display = 'block';
-                hasContent = true;
-            } else {
-                imageEl.style.display = 'none';
-                imageEl.src = '';
-            }
+            if (task.image) { imageEl.src = task.image; imageEl.style.display = 'block'; hasContent = true; } 
+            else { imageEl.style.display = 'none'; imageEl.src = ''; }
 
             emptyEl.style.display = hasContent ? 'none' : 'block';
-
-            document.getElementById('taskDetailsModal').classList.add('show');
-            document.body.style.overflow = 'hidden';
+            document.getElementById('taskDetailsModal').classList.add('show'); document.body.style.overflow = 'hidden';
         }
 
-        function closeTaskDetailsModal() {
-            document.getElementById('taskDetailsModal').classList.remove('show');
-            document.body.style.overflow = 'auto';
-        }
+        function closeTaskDetailsModal() { document.getElementById('taskDetailsModal').classList.remove('show'); document.body.style.overflow = 'auto'; }
 
         // --- Grid Rendering ---
-        function createWeekGridHTML(mondayDateObj) {
+        function createGridHTML(startDateObj, numDays, useModalSelection = false) {
             let html = ''; 
             const todayYMD = getLocalYMD(new Date());
 
-            for (let i = 0; i < 7; i++) {
-                const currentDay = new Date(mondayDateObj); currentDay.setDate(mondayDateObj.getDate() + i);
+            for (let i = 0; i < numDays; i++) {
+                const currentDay = new Date(startDateObj); currentDay.setDate(startDateObj.getDate() + i);
                 const ymd = getLocalYMD(currentDay);
                 const isToday = ymd === todayYMD; const isSelected = ymd === selectedDateYMD;
+                const clickFunction = useModalSelection ? `selectDateFromModal('${ymd}')` : `selectDate('${ymd}')`;
                 
                 const tasks = appData.calendar[ymd] || [];
                 let tasksHtml = '';
@@ -507,7 +486,6 @@
                 tasks.forEach((task, taskIdx) => {
                     const hasAttachment = task.notes || task.image;
                     const icon = hasAttachment ? `<span style="font-size: 0.7rem; opacity: 0.6; margin-left: 5px;">📄</span>` : '';
-                    
                     tasksHtml += `
                         <div class="task-item" onclick="event.stopPropagation(); openTaskDetails('${ymd}', ${taskIdx})">
                             <span style="flex-grow: 1;">${task.title} ${icon}</span>
@@ -517,7 +495,7 @@
                 });
 
                 html += `
-                    <div class="day-col ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}" onclick="selectDate('${ymd}')">
+                    <div class="day-col ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}" onclick="${clickFunction}">
                         <div class="day-header">${getFormattedDayTitle(currentDay)}</div>
                         <div class="day-tasks">${tasksHtml}</div>
                     </div>
@@ -527,20 +505,27 @@
         }
 
         function renderMainWeek() {
-            document.getElementById('mainWeekGrid').innerHTML = createWeekGridHTML(getMonday(new Date()));
+            // Render 14 days (2 weeks) for the central hub
+            document.getElementById('mainWeekGrid').innerHTML = createGridHTML(displayStartMonday, 14, false);
+            
+            // Update Title Context
+            const d1 = new Date(displayStartMonday);
+            const d2 = new Date(displayStartMonday); d2.setDate(d2.getDate() + 13);
+            document.getElementById('mainWeekTitle').innerHTML = `Command Center <span style="font-size: 1rem; color: var(--text-muted); font-weight: normal; margin-left: 8px;">(${d1.getDate()} ${d1.toLocaleString('default', {month:'short'})} - ${d2.getDate()} ${d2.toLocaleString('default', {month:'short'})})</span>`;
         }
 
         function renderFullCalendar() {
             const container = document.getElementById('fullCalendarContainer'); container.innerHTML = '';
-            let currentMonday = getMonday(new Date()); const deadlineMonday = getMonday(projectDeadline);
-            let weekCount = 2;
+            let currentMonday = getMonday(projectStartDate); 
+            const deadlineMonday = getMonday(projectDeadline);
+            let weekCount = 1;
             
             while (currentMonday <= deadlineMonday) {
                 const wrapper = document.createElement('div'); wrapper.className = 'week-wrapper';
-                const startDateStr = `${currentMonday.getDate()} ${currentMonday.toLocaleString('default', { month: 'short' })}`;
+                const startDateStr = `${currentMonday.getDate()} ${currentMonday.toLocaleString('default', { month: 'short' })} ${currentMonday.getFullYear()}`;
                 wrapper.innerHTML = `
-                    <div class="week-title">Week ${weekCount} <span style="font-size: 0.85rem; color: var(--text-muted); margin-left: 8px;">(Starts ${startDateStr})</span></div>
-                    <div class="timetable-grid">${createWeekGridHTML(currentMonday)}</div>
+                    <div class="week-title">Project Week ${weekCount} <span style="font-size: 0.85rem; color: var(--text-muted); margin-left: 8px;">(Starts ${startDateStr})</span></div>
+                    <div class="timetable-grid">${createGridHTML(currentMonday, 7, true)}</div>
                 `;
                 container.appendChild(wrapper); currentMonday.setDate(currentMonday.getDate() + 7); weekCount++;
             }
@@ -548,7 +533,7 @@
 
         // --- General Modals & Drag/Drop ---
         function openCalendarModal() { renderFullCalendar(); document.getElementById('calendarModal').classList.add('show'); document.body.style.overflow = 'hidden'; }
-        function closeCalendarModal() { document.getElementById('calendarModal').classList.remove('show'); document.body.style.overflow = 'auto'; renderMainWeek(); }
+        function closeCalendarModal() { document.getElementById('calendarModal').classList.remove('show'); document.body.style.overflow = 'auto'; }
 
         function drag(ev) { ev.dataTransfer.setData("text", ev.target.id); ev.target.style.opacity = '0.5'; }
         function allowDrop(ev) { ev.preventDefault(); }
