@@ -48,7 +48,7 @@
         h1, h2, h3 { font-weight: 600; }
         
         .header-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
-        .project-title { background: transparent; border: none; color: var(--text-main); font-size: 2rem; font-weight: 700; width: 100%; max-width: 600px; border-bottom: 2px solid transparent; transition: border-color 0.3s; }
+        .project-title { background: transparent; border: none; color: var(--text-main); font-size: 2rem; font-weight: 700; width: 100%; max-width: 500px; border-bottom: 2px solid transparent; transition: border-color 0.3s; }
         .project-title:focus { outline: none; border-bottom: 2px solid var(--accent); }
         .countdown { background: rgba(94, 106, 210, 0.1); color: #8ab4f8; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; border: 1px solid rgba(94, 106, 210, 0.3); }
 
@@ -147,6 +147,7 @@
         @media (max-width: 768px) {
             .timetable-grid { grid-template-columns: repeat(2, 1fr); }
             .bottom-grid { grid-template-columns: 1fr; }
+            .header-top { flex-direction: column; align-items: flex-start; }
         }
     </style>
 </head>
@@ -157,7 +158,14 @@
         <div class="panel">
             <div class="header-top">
                 <input type="text" id="projectTitle" class="project-title" placeholder="Click to set Project Title...">
-                <div class="countdown" id="countdownTimer" data-tooltip="Total time remaining for your 30% assessment">Loading deadline...</div>
+                
+                <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                    <button class="btn-outline" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick="exportData()" data-tooltip="Download your data as a backup file">⬇️ Export</button>
+                    <button class="btn-outline" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick="document.getElementById('importFile').click()" data-tooltip="Restore data from a backup file">⬆️ Import</button>
+                    <input type="file" id="importFile" style="display: none;" accept=".json" onchange="importData(event)">
+                    
+                    <div class="countdown" id="countdownTimer" data-tooltip="Total time remaining for your 30% assessment">Loading deadline...</div>
+                </div>
             </div>
             <div>
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
@@ -314,10 +322,10 @@
     </div>
 
     <script>
-        // --- Core Data Management V9 ---
-        const storageKey = 'hsc_project_dashboard_v9'; 
+        // --- Core Data Management V10 ---
+        const storageKey = 'hsc_project_dashboard_v10'; 
         const projectDeadline = new Date("2026-06-25T00:00:00");
-        const projectStartDate = new Date("2025-10-01T00:00:00"); // Base start for full timeline
+        const projectStartDate = new Date("2025-10-01T00:00:00"); 
         
         let appData = JSON.parse(localStorage.getItem(storageKey)) || {
             title: '', inputs: {}, 
@@ -325,7 +333,13 @@
             calendar: {} 
         };
 
-        // UI State
+        // Migration Check
+        for (let date in appData.calendar) {
+            appData.calendar[date] = appData.calendar[date].map(task => {
+                return typeof task === 'string' ? { title: task, notes: '', image: null } : task;
+            });
+        }
+
         let displayStartMonday = getMonday(new Date()); 
         let selectedDateYMD = getLocalYMD(new Date()); 
         let pendingImageData = null; 
@@ -337,6 +351,44 @@
             } catch (e) {
                 alert("Storage Error! You might have saved too many large images. Try deleting some screenshots.");
             }
+        }
+
+        // --- Import / Export System ---
+        function exportData() {
+            const dataStr = JSON.stringify(appData, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `HSC_Dashboard_Backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if(importedData && typeof importedData === 'object' && importedData.calendar) {
+                        appData = importedData;
+                        saveToStorage();
+                        alert("Backup imported successfully! The dashboard will now refresh.");
+                        location.reload(); 
+                    } else {
+                        alert("Invalid backup file format. Please ensure you selected a valid HSC Dashboard JSON file.");
+                    }
+                } catch (error) {
+                    alert("Error reading the file. Make sure it is a valid JSON backup.");
+                }
+                event.target.value = ''; // Reset input
+            };
+            reader.readAsText(file);
         }
 
         // --- Date Utilities ---
@@ -395,10 +447,9 @@
             updateTaskFormPanel();
         }
 
-        // Used when clicking a day in the FULL TIMELINE
         function selectDateFromModal(ymd) {
             selectedDateYMD = ymd;
-            displayStartMonday = getMonday(new Date(ymd)); // Shift main view to this week
+            displayStartMonday = getMonday(new Date(ymd)); 
             closeCalendarModal();
             renderMainWeek();
             updateTaskFormPanel();
@@ -505,10 +556,8 @@
         }
 
         function renderMainWeek() {
-            // Render 14 days (2 weeks) for the central hub
             document.getElementById('mainWeekGrid').innerHTML = createGridHTML(displayStartMonday, 14, false);
             
-            // Update Title Context
             const d1 = new Date(displayStartMonday);
             const d2 = new Date(displayStartMonday); d2.setDate(d2.getDate() + 13);
             document.getElementById('mainWeekTitle').innerHTML = `Command Center <span style="font-size: 1rem; color: var(--text-muted); font-weight: normal; margin-left: 8px;">(${d1.getDate()} ${d1.toLocaleString('default', {month:'short'})} - ${d2.getDate()} ${d2.toLocaleString('default', {month:'short'})})</span>`;
